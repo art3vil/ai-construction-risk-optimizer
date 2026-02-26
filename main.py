@@ -12,7 +12,7 @@ from src.simulator import simulate_scenario
 def run_web_app():
     """Функция для запуска Streamlit приложения"""
     print("\n=== Запуск веб-интерфейса... ===")
-    # Путь к вашему файлу app.py
+    # Путь к вашему файлу
     app_path = "app/streamlit_app.py"
 
     if not os.path.exists(app_path):
