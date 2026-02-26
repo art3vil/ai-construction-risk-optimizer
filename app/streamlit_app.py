@@ -8,6 +8,68 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from src.simulator import simulate_scenario
 
 
+def _format_margin(margin: float) -> str:
+    """Маржа в процентах, читаемо."""
+    pct = margin * 100
+    return f"{pct:+.1f}%"
+
+
+def _format_risk(prob: float) -> str:
+    """Вероятность перерасхода в процентах."""
+    return f"{prob * 100:.1f}%"
+
+
+def _get_recommendations(result: dict) -> tuple[str, list[str]]:
+    """
+    По результату симуляции возвращает: (краткий вердикт, список рекомендаций).
+    """
+    margin = result["scenario_margin_pred"]
+    risk = result["scenario_risk_prob"]
+    delta_m = result["delta_margin"]
+    delta_r = result["delta_risk"]
+
+    recommendations = []
+
+    # Вердикт по марже
+    if margin < 0:
+        verdict_m = "Маржа отрицательная — проект убыточен по прогнозу."
+        recommendations.append("Пересмотрите смету: снизьте затраты на материалы или логистику, либо увеличьте плановый бюджет.")
+        recommendations.append("Рассмотрите более опытную бригаду (выше эффективность при том же сроке).")
+    elif margin < 0.05:
+        verdict_m = "Низкая маржа — небольшой запас на риски."
+        recommendations.append("Закладывайте буфер в бюджет или снижайте издержки (поставщики, доставка, класс материалов).")
+    elif margin < 0.15:
+        verdict_m = "Маржа в приемлемом диапазоне."
+    else:
+        verdict_m = "Хорошая прогнозная маржа."
+
+    # Вердикт по риску перерасхода
+    if risk > 0.6:
+        verdict_r = "Высокий риск перерасхода бюджета."
+        recommendations.append("Усилььте контроль: выберите более надёжных поставщиков (supplier_reliability_score ближе к 1.0).")
+        recommendations.append("Сократите логистические риски: уменьшите дистанцию доставки или заложите запас по срокам.")
+        recommendations.append("По возможности перенесите старт на сезон с лучшей погодой (лето).")
+    elif risk > 0.4:
+        verdict_r = "Умеренный риск перерасхода."
+        recommendations.append("Мониторьте ключевые драйверы: цены на материалы, сроки поставок, погоду.")
+    else:
+        verdict_r = "Риск перерасхода низкий."
+
+    # Изменение относительно базового сценария
+    if delta_m > 0.01:
+        recommendations.append("Текущие параметры улучшили маржу относительно базового проекта — такой сценарий выгоднее.")
+    elif delta_m < -0.01:
+        recommendations.append("Текущие параметры снизили маржу относительно базового проекта — рассмотрите откат части изменений.")
+
+    if delta_r > 0.1:
+        recommendations.append("Риск перерасхода вырос по сравнению с базой — стоит усилить контроль или смягчить условия (поставщики, сроки, сезон).")
+    elif delta_r < -0.1:
+        recommendations.append("Риск перерасхода снизился — выбранный сценарий безопаснее базового.")
+
+    verdict = f"{verdict_m} {verdict_r}"
+    return verdict, recommendations
+
+
 def main() -> None:
     st.title("AI Construction Risk Optimizer")
 
@@ -114,8 +176,39 @@ def main() -> None:
     st.markdown("---")
     if st.button("Рассчитать риск и маржу"):
         result = simulate_scenario(base_index=base_index, overrides=overrides)
+
         st.subheader("Результат симуляции")
-        st.json(result)
+
+        # Карточки с ключевыми показателями
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric(
+                "Прогноз маржи (сценарий)",
+                _format_margin(result["scenario_margin_pred"]),
+                _format_margin(result["delta_margin"]),
+            )
+        with col2:
+            st.metric(
+                "Вероятность перерасхода бюджета",
+                _format_risk(result["scenario_risk_prob"]),
+                f"{result['delta_risk'] * 100:+.1f} п.п.",
+            )
+        with col3:
+            base_m = _format_margin(result["original_margin_pred"])
+            base_r = _format_risk(result["original_risk_prob"])
+            st.caption("Базовый проект")
+            st.markdown(f"Маржа: **{base_m}** · Риск: **{base_r}**")
+
+        # Вердикт и рекомендации
+        verdict, recommendations = _get_recommendations(result)
+        st.info(verdict)
+
+        st.subheader("Рекомендации по улучшению")
+        for rec in recommendations:
+            st.markdown(f"- {rec}")
+
+        with st.expander("Числовые значения (для отчётов)"):
+            st.json(result)
 
 
 if __name__ == "__main__":
