@@ -318,7 +318,8 @@ with tab1:
 
         with res_2:
             st.subheader("Вывод системы:")
-            avg = df[st.session_state['target']].mean()
+            # используем закодированное значение целевой переменной, чтобы гарантировать числовой тип
+            avg = df_encoded[st.session_state['target']].mean()
             diff = ((pred_val / avg) - 1) * 100
 
             if diff > 15:
